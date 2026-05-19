@@ -59,11 +59,11 @@ button{border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-fam
 .badge-ok{background:#D4EDDA;color:#1A6B30}
 .badge-warn{background:#FFF3CD;color:#856404}
 .badge-danger{background:#FCEAEA;color:#C0392B}
+.badge-proj{background:#EEE8FF;color:#6B3FA0}
 input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding:4px 6px;font-size:12px;font-family:'Montserrat',sans-serif;color:#2C4A52;width:100%}
 </style>
 </head>
 <body>
-
 <div id="root">
 
 <div class="header">
@@ -130,18 +130,24 @@ input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.75rem">
     <div>
       <div class="slabel" style="margin-bottom:2px">Análisis inteligente</div>
-      <div style="font-size:11px;color:#8AABB5;font-weight:500">Generado por Claude AI sobre los datos actuales del ejercicio</div>
+      <div style="font-size:11px;color:#8AABB5;font-weight:500">Generado por Claude AI · Incluye proyección de IPC y TC para meses futuros</div>
     </div>
     <button class="btn-action" id="ai-btn" onclick="runAI()">✦ Analizar con IA</button>
   </div>
   <div id="ai-output" style="font-size:13px;color:#5A7A85;line-height:1.8;min-height:40px">
-    <span style="color:#8AABB5">Hacé clic en "Analizar con IA" para generar un análisis ejecutivo del presupuesto.</span>
+    <span style="color:#8AABB5">Hacé clic en "Analizar con IA" para generar un análisis ejecutivo y proyectar IPC y TC futuros.</span>
   </div>
 </div>
 
 <div class="macro-grid">
-  <div class="card" style="margin:0"><div class="slabel">IPC mensual (%)</div><div style="position:relative;height:180px"><canvas id="ipcChart"></canvas></div></div>
-  <div class="card" style="margin:0"><div class="slabel">Tipo de cambio USD/ARS</div><div style="position:relative;height:180px"><canvas id="tcChart"></canvas></div></div>
+  <div class="card" style="margin:0">
+    <div class="slabel">IPC mensual (%) <span id="ipc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:6px;display:none">★ May-Sep proyectado por IA</span></div>
+    <div style="position:relative;height:180px"><canvas id="ipcChart"></canvas></div>
+  </div>
+  <div class="card" style="margin:0">
+    <div class="slabel">Tipo de cambio USD/ARS <span id="tc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:6px;display:none">★ May-Sep proyectado por IA</span></div>
+    <div style="position:relative;height:180px"><canvas id="tcChart"></canvas></div>
+  </div>
 </div>
 
 <div class="card" style="margin-top:1.25rem">
@@ -155,46 +161,33 @@ input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding
 const WEBHOOK='https://fyo.app.n8n.cloud/webhook/presupuesto-data';
 const ML=['Oct','Nov','Dic','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep'];
 
-// Nombres EXACTAMENTE igual al COD_MAP de n8n (con tildes)
 const CUENTAS=[
-  'Librería',
-  'Archivo - Correo - Encomiendas',
-  'Cadetería',
-  'Beneficios',
-  'Beneficios CH - Almuerzos e Indumentaria',
-  'Manutención Personal',
-  'Electricidad',
-  'Alquileres',
-  'Expensas',
-  'Mantenimiento Oficina',
-  'Automotores',
-  'Premios'
+  'Librería','Archivo - Correo - Encomiendas','Cadetería','Beneficios',
+  'Beneficios CH - Almuerzos e Indumentaria','Manutención Personal','Electricidad',
+  'Alquileres','Expensas','Mantenimiento Oficina','Automotores','Premios'
 ];
-
 const LABELS=[
-  'Librería',
-  'Archivo - Correo - Enc.',
-  'Cadetería',
-  'Beneficios',
-  'Benef. CH - Almuerzos',
-  'Manutención Personal',
-  'Electricidad',
-  'Alquileres',
-  'Expensas',
-  'Mantenimiento Oficina',
-  'Automotores',
-  'Premios'
+  'Librería','Archivo - Correo - Enc.','Cadetería','Beneficios',
+  'Benef. CH - Almuerzos','Manutención Personal','Electricidad',
+  'Alquileres','Expensas','Mantenimiento Oficina','Automotores','Premios'
 ];
 
 const fiscalLabel=yr=>'Oct '+yr+' – Sep '+(yr+1);
 
+// IPC real INDEC (Oct25-Abr26), 0 = pendiente/proyección
+const IPC_REAL_2025 = [2.3, 2.5, 2.8, 2.9, 2.9, 3.4, 2.6, 0, 0, 0, 0, 0];
+// TC real BNA venta fin de mes (Oct25-Abr26), 0 = pendiente/proyección  
+const TC_REAL_2025  = [1475, 1475, 1480, 1415, 1420, 1405, 1415, 0, 0, 0, 0, 0];
+
 function makeYear(sy){
   const s={2023:.55,2024:.75,2025:1}[sy]||1;
   const bp=[80,60,120,200,180,150,300,250,80,100,120,350];
-  const ipcD={2025:[2.4,2.3,2.7,2.3,2.1,2.6,2.8,2.4,0,0,0,0],2024:[4.0,3.5,3.5,2.9,2.4,2.7,2.3,2.1,2.6,2.8,2.4,2.2],2023:[7.0,8.3,25.5,20.6,13.2,8.8,8.0,4.0,4.6,12.8,12.4,25.5]};
-  const tcD={2025:[1055,1080,1100,1120,1145,1170,1200,1230,0,0,0,0],2024:[910,935,960,975,990,1010,1055,1060,1075,1100,1120,1145],2023:[350,362,374,450,490,528,560,610,680,750,830,920]};
-  const am=sy===2025?8:12;
-  const obj={meta:{activeMeses:am},macro:{ipc:ipcD[sy],tc:tcD[sy]},cuentas:{}};
+  const ipcD={2024:[4.0,3.5,3.5,2.9,2.4,2.7,2.3,2.1,2.6,2.8,2.4,2.2],2023:[7.0,8.3,25.5,20.6,13.2,8.8,8.0,4.0,4.6,12.8,12.4,25.5]};
+  const tcD={2024:[910,935,960,975,990,1010,1055,1060,1075,1100,1120,1145],2023:[350,362,374,450,490,528,560,610,680,750,830,920]};
+  const am=sy===2025?7:12;
+  const ipc=sy===2025?[...IPC_REAL_2025]:ipcD[sy]||Array(12).fill(2);
+  const tc=sy===2025?[...TC_REAL_2025]:tcD[sy]||Array(12).fill(1000);
+  const obj={meta:{activeMeses:am},macro:{ipc,tc},cuentas:{}};
   CUENTAS.forEach((c,i)=>{
     const bk=Math.round(bp[i]*s);
     obj.cuentas[c]={
@@ -223,7 +216,7 @@ function nm(yr){return DATA[yr].meta.activeMeses;}
 function sumF(yr,field,lim){return CUENTAS.reduce((s,c)=>s+DATA[yr].cuentas[c][field].slice(0,lim).reduce((a,v,mi)=>a+conv(v,yr,mi),0),0);}
 function mSum(yr,mi,f){return CUENTAS.reduce((s,c)=>s+conv(DATA[yr].cuentas[c][f][mi],yr,mi),0);}
 function gc(){return'rgba(0,142,170,.08)';}
-function tc(){return'#8AABB5';}
+function tcol(){return'#8AABB5';}
 
 function renderKPIs(yr){
   const tp=sumF(yr,'presup',12),te=sumF(yr,'ejec',nm(yr));
@@ -242,7 +235,7 @@ function renderMainChart(yr){
   const cfg={type:'bar',data:{labels:ML,datasets:[
     {label:'Presupuestado',data:pD,backgroundColor:'rgba(0,142,170,.18)',borderColor:'#008EAA',borderWidth:1.5,borderRadius:6},
     {label:'Ejecutado',data:eD,backgroundColor:'rgba(26,58,74,.2)',borderColor:'#1A3A4A',borderWidth:1.5,borderRadius:6}
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+fmtV(ctx.parsed.y);}}}},scales:{x:{grid:{color:gc()},ticks:{color:tc(),font:{size:11,family:'Montserrat',weight:'600'},autoSkip:false}},y:{grid:{color:gc()},ticks:{color:tc(),font:{size:11,family:'Montserrat'},callback:axFmt},beginAtZero:true}}}};
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+fmtV(ctx.parsed.y);}}}},scales:{x:{grid:{color:gc()},ticks:{color:tcol(),font:{size:11,family:'Montserrat',weight:'600'},autoSkip:false}},y:{grid:{color:gc()},ticks:{color:tcol(),font:{size:11,family:'Montserrat'},callback:axFmt},beginAtZero:true}}}};
   if(charts.main)charts.main.destroy();
   charts.main=new Chart(document.getElementById('mainChart'),cfg);
 }
@@ -255,7 +248,7 @@ function renderCuentasChart(yr){
   const cfg={type:'bar',data:{labels:lbs,datasets:[
     {label:'Presupuestado',data:pD,backgroundColor:'rgba(0,142,170,.18)',borderColor:'#008EAA',borderWidth:1.5,borderRadius:6},
     {label:'Ejecutado',data:eD,backgroundColor:'rgba(26,58,74,.2)',borderColor:'#1A3A4A',borderWidth:1.5,borderRadius:6}
-  ]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+fmtV(ctx.parsed.x);}}}},scales:{x:{grid:{color:gc()},ticks:{color:tc(),font:{size:11,family:'Montserrat'},callback:axFmt},beginAtZero:true},y:{grid:{color:gc()},ticks:{color:tc(),font:{size:11,family:'Montserrat',weight:'500'}}}}}};
+  ]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+fmtV(ctx.parsed.x);}}}},scales:{x:{grid:{color:gc()},ticks:{color:tcol(),font:{size:11,family:'Montserrat'},callback:axFmt},beginAtZero:true},y:{grid:{color:gc()},ticks:{color:tcol(),font:{size:11,family:'Montserrat',weight:'500'}}}}}};
   if(charts.cuentas)charts.cuentas.destroy();
   charts.cuentas=new Chart(document.getElementById('cuentasChart'),cfg);
 }
@@ -299,11 +292,42 @@ function renderMonthTable(yr){
 
 function renderMacro(yr){
   var d=DATA[yr].macro;
-  var opts=function(cb){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc()},ticks:{color:tc(),font:{size:10,family:'Montserrat',weight:'600'}}},y:{grid:{color:gc()},ticks:{color:tc(),font:{size:10,family:'Montserrat'},callback:cb}}}};};
-  var ipcCfg={type:'line',data:{labels:ML,datasets:[{label:'IPC %',data:d.ipc.map(function(v){return v>0?v:null;}),borderColor:'#008EAA',backgroundColor:'rgba(0,142,170,.08)',tension:.4,pointRadius:4,pointBackgroundColor:'#008EAA',pointBorderColor:'#fff',pointBorderWidth:2,fill:true,borderWidth:2}]},options:opts(function(v){return v+'%';})};
-  var tcCfg={type:'line',data:{labels:ML,datasets:[{label:'TC',data:d.tc.map(function(v){return v>0?v:null;}),borderColor:'#1A3A4A',backgroundColor:'rgba(26,58,74,.08)',tension:.4,pointRadius:4,pointBackgroundColor:'#1A3A4A',pointBorderColor:'#fff',pointBorderWidth:2,fill:true,borderWidth:2}]},options:opts(function(v){return '$'+v;})};
+  var primerFuturo=d.ipc.findIndex(function(v){return v===0;});
+  
+  // Colores: real vs proyectado
+  var ipcColors=d.ipc.map(function(v,i){return v>0?'#008EAA':'rgba(107,63,160,.5)';});
+  var tcColors=d.tc.map(function(v,i){return v>0?'#1A3A4A':'rgba(107,63,160,.5)';});
+
+  var opts=function(cb){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{afterLabel:function(ctx){var i=ctx.dataIndex;var d2=ctx.chart.data.datasets[0];return d2.borderColor[i]==='rgba(107,63,160,.5)'?'(proyectado por IA)':'';}}}},scales:{x:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Montserrat',weight:'600'}}},y:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Montserrat'},callback:cb}}}};};
+
+  var ipcCfg={type:'bar',data:{labels:ML,datasets:[{
+    label:'IPC %',
+    data:d.ipc.map(function(v){return v>0?v:null;}),
+    backgroundColor:ipcColors,
+    borderColor:ipcColors,
+    borderWidth:1.5,
+    borderRadius:4
+  },{
+    label:'IPC proyectado',
+    data:d.ipc.map(function(v,i){return i>=primerFuturo&&primerFuturo>=0&&v>0?v:null;}),
+    backgroundColor:'rgba(107,63,160,.35)',
+    borderColor:'rgba(107,63,160,.7)',
+    borderWidth:1.5,
+    borderRadius:4
+  }]},options:opts(function(v){return v+'%';})};
+
+  var tcCfg={type:'line',data:{labels:ML,datasets:[
+    {label:'TC real',data:d.tc.map(function(v){return v>0&&d.tc.indexOf(v)<primerFuturo||primerFuturo<0?v>0?v:null:null;}),borderColor:'#1A3A4A',backgroundColor:'rgba(26,58,74,.08)',tension:.4,pointRadius:4,pointBackgroundColor:'#1A3A4A',pointBorderColor:'#fff',pointBorderWidth:2,fill:true,borderWidth:2},
+    {label:'TC proyectado',data:d.tc.map(function(v,i){return i>=primerFuturo&&primerFuturo>=0&&v>0?v:null;}),borderColor:'rgba(107,63,160,.8)',backgroundColor:'rgba(107,63,160,.06)',tension:.4,pointRadius:4,pointBackgroundColor:'rgba(107,63,160,.8)',pointBorderColor:'#fff',pointBorderWidth:2,fill:true,borderWidth:2,borderDash:[5,4]}
+  ]},options:opts(function(v){return '$'+v;})};
+
   if(charts.ipc)charts.ipc.destroy(); charts.ipc=new Chart(document.getElementById('ipcChart'),ipcCfg);
   if(charts.tc)charts.tc.destroy(); charts.tc=new Chart(document.getElementById('tcChart'),tcCfg);
+
+  // Mostrar badge si hay proyección
+  var tieneProyIpc=d.ipc.some(function(v,i){return i>6&&v>0;});
+  document.getElementById('ipc-badge').style.display=tieneProyIpc?'inline':'none';
+  document.getElementById('tc-badge').style.display=tieneProyIpc?'inline':'none';
 }
 
 function render(yr){
@@ -336,8 +360,6 @@ async function doSync(){
     if(!res.ok)throw new Error('Error '+res.status);
     var json=await res.json();
     if(!json.cuentas)throw new Error('Respuesta inesperada.');
-
-    // Cargar ejecutado por año
     [2025,2024,2023].forEach(function(yr){
       if(json.cuentas[yr]){
         CUENTAS.forEach(function(c){
@@ -346,14 +368,14 @@ async function doSync(){
       }
       if(json.activeMeses&&json.activeMeses[yr]) DATA[yr].meta.activeMeses=json.activeMeses[yr];
     });
-
-    // Cargar presupuesto (ejercicio 2025)
     if(json.presupuesto){
       CUENTAS.forEach(function(c){
         if(json.presupuesto[c]) DATA[2025].cuentas[c].presup=json.presupuesto[c];
       });
     }
-
+    // Mantener IPC y TC reales, no pisarlos
+    DATA[2025].macro.ipc=IPC_REAL_2025.slice();
+    DATA[2025].macro.tc=TC_REAL_2025.slice();
     var now=new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     var statusText='Última actualización: '+now+' — datos reales de OneDrive';
     document.getElementById('sync-status').textContent=statusText;
@@ -370,7 +392,7 @@ async function runAI(){
   var btn=document.getElementById('ai-btn');
   var out=document.getElementById('ai-output');
   btn.disabled=true;btn.textContent='Analizando...';
-  out.innerHTML='<span style="color:#8AABB5">Generando análisis con IA...</span>';
+  out.innerHTML='<span style="color:#8AABB5">Generando análisis y proyecciones con IA...</span>';
   var yr=CY,n=nm(yr);
   var totPresup=sumF(yr,'presup',12)*1000;
   var totEjec=sumF(yr,'ejec',n)*1000;
@@ -380,16 +402,49 @@ async function runAI(){
     var e=DATA[yr].cuentas[c].ejec.slice(0,n).reduce(function(a,b){return a+b;},0)*1000;
     return '- '+LABELS[ci]+': presup $'+Math.round(p/1000).toLocaleString('es-AR')+'k, ejec $'+Math.round(e/1000).toLocaleString('es-AR')+'k ('+Math.round(e/p*100)+'%)';
   }).join('\n');
-  var ipcArr=DATA[yr].macro.ipc.filter(function(v){return v>0;});
-  var ipcProm=ipcArr.length?Math.round(ipcArr.reduce(function(a,b){return a+b;},0)/ipcArr.length*10)/10:0;
-  var tcArr=DATA[yr].macro.tc.filter(function(v){return v>0;});
-  var tcUlt=tcArr.length?tcArr[tcArr.length-1]:0;
-  var prompt='Sos un analista financiero experto. Analizá el siguiente estado de ejecución presupuestaria de una empresa argentina (ejercicio fiscal Oct 2025 - Sep 2026, en pesos argentinos).\n\nDatos al mes '+ML[n-1]+' ('+n+' meses ejecutados de 12):\n- Presupuesto total anual: $'+Math.round(totPresup/1000).toLocaleString('es-AR')+'k\n- Ejecutado acumulado: $'+Math.round(totEjec/1000).toLocaleString('es-AR')+'k\n- Porcentaje de ejecución: '+pctTotal+'%\n- IPC promedio del período: '+ipcProm+'% mensual\n- Tipo de cambio actual: $'+tcUlt.toLocaleString('es-AR')+' ARS/USD\n\nDesglose por cuenta:\n'+cuentasResumen+'\n\nGenerá un análisis ejecutivo en español con:\n1. Evaluación general considerando el contexto inflacionario\n2. Las 2-3 cuentas con mayor desvío o riesgo\n3. Proyección de cierre del ejercicio\n4. Recomendaciones concretas\n\nSé directo, usá números, tono profesional. Máximo 250 palabras.';
+  var ipcReal=IPC_REAL_2025.filter(function(v){return v>0;});
+  var tcReal=TC_REAL_2025.filter(function(v){return v>0;});
+  var mesesFaltantes=ML.slice(ipcReal.length);
+
+  var prompt='Sos un especialista en finanzas y mercados argentinos. Tenés dos tareas:\n\n'
+    +'**TAREA 1 — Análisis presupuestario**\n'
+    +'Ejercicio fiscal Oct 2025 - Sep 2026 ('+n+' meses ejecutados de 12, hasta '+ML[n-1]+'):\n'
+    +'- Presupuesto anual: $'+Math.round(totPresup/1000).toLocaleString('es-AR')+'k\n'
+    +'- Ejecutado: $'+Math.round(totEjec/1000).toLocaleString('es-AR')+'k ('+pctTotal+'%)\n'
+    +'- IPC real acumulado (Oct25-'+ML[ipcReal.length-1]+'): '+ipcReal.join(', ')+'%\n'
+    +'- TC BNA real (Oct25-'+ML[tcReal.length-1]+'): '+tcReal.map(function(v){return '$'+v;}).join(', ')+'\n\n'
+    +'Desglose por cuenta:\n'+cuentasResumen+'\n\n'
+    +'**TAREA 2 — Proyección macroeconómica**\n'
+    +'Proyectá los siguientes meses faltantes del ejercicio: '+mesesFaltantes.join(', ')+'\n'
+    +'Basate en el contexto actual: acuerdo con FMI, banda cambiaria, convergencia inflacionaria, ROFEX y expectativas de mercado.\n'
+    +'Respondé con el análisis ejecutivo (máx 200 palabras) y al final agregá un bloque JSON exactamente así:\n'
+    +'```json\n{"ipc_proyectado":[v1,v2,v3,v4,v5],"tc_proyectado":[v1,v2,v3,v4,v5]}\n```\n'
+    +'Donde los arrays tienen '+mesesFaltantes.length+' valores correspondientes a '+mesesFaltantes.join(', ')+'. IPC en % mensual, TC en pesos venta BNA fin de mes.';
+
   try{
-    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,messages:[{role:'user',content:prompt}]})});
     var data=await res.json();
     var text=data.content&&data.content[0]?data.content[0].text:'No se pudo generar el análisis.';
-    out.innerHTML=text.replace(/\n\n/g,'<br><br>').replace(/\*\*(.*?)\*\*/g,'<strong style="color:#2C4A52">$1</strong>').replace(/\n/g,'<br>');
+
+    // Extraer JSON de proyección
+    var jsonMatch=text.match(/```json\s*([\s\S]*?)\s*```/);
+    if(jsonMatch){
+      try{
+        var proj=JSON.parse(jsonMatch[1]);
+        var ipcCompleto=IPC_REAL_2025.slice();
+        var tcCompleto=TC_REAL_2025.slice();
+        var startIdx=ipcReal.length;
+        proj.ipc_proyectado.forEach(function(v,i){if(startIdx+i<12)ipcCompleto[startIdx+i]=v;});
+        proj.tc_proyectado.forEach(function(v,i){if(startIdx+i<12)tcCompleto[startIdx+i]=v;});
+        DATA[2025].macro.ipc=ipcCompleto;
+        DATA[2025].macro.tc=tcCompleto;
+        renderMacro(2025);
+      }catch(e){console.warn('No se pudo parsear proyección',e);}
+    }
+
+    // Mostrar texto sin el bloque JSON
+    var displayText=text.replace(/```json[\s\S]*?```/g,'').trim();
+    out.innerHTML=displayText.replace(/\n\n/g,'<br><br>').replace(/\*\*(.*?)\*\*/g,'<strong style="color:#2C4A52">$1</strong>').replace(/\n/g,'<br>');
   }catch(e){
     out.innerHTML='<span style="color:#C0392B">Error al conectar con la IA.</span>';
   }finally{
@@ -414,7 +469,9 @@ function renderPresupBody(yr,idx){
   if(isMacro){
     var m=DATA[yr].macro;
     ML.forEach(function(mes,i){
-      html+='<div style="background:#fff;border-radius:10px;padding:.75rem"><div style="font-size:11px;font-weight:700;color:var(--fyo);margin-bottom:6px;text-transform:uppercase">'+mes+'</div>'
+      var esProyIpc=IPC_REAL_2025[i]===0&&m.ipc[i]>0;
+      var esProyTc=TC_REAL_2025[i]===0&&m.tc[i]>0;
+      html+='<div style="background:#fff;border-radius:10px;padding:.75rem"><div style="font-size:11px;font-weight:700;color:var(--fyo);margin-bottom:6px;text-transform:uppercase">'+mes+(esProyIpc?' <span style="font-size:9px;color:#6B3FA0">★IA</span>':'')+'</div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
         +'<div><label style="font-size:10px;color:#8AABB5;display:block;margin-bottom:2px;font-weight:600">IPC(%)</label><input type="number" id="ipc'+i+'" value="'+m.ipc[i]+'" step="0.1"></div>'
         +'<div><label style="font-size:10px;color:#8AABB5;display:block;margin-bottom:2px;font-weight:600">TC</label><input type="number" id="tc'+i+'" value="'+m.tc[i]+'"></div>'
