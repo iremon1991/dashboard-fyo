@@ -154,8 +154,38 @@ input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding
 <script>
 const WEBHOOK='https://fyo.app.n8n.cloud/webhook/presupuesto-data';
 const ML=['Oct','Nov','Dic','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep'];
-const CUENTAS=['Libreria','Archivo - Correo - Encomiendas','Cadeteria','Beneficios','Beneficios CH - Almuerzos e Indumentaria','Manutencion Personal','Electricidad','Alquileres','Expensas','Mantenimiento Oficina','Automotores','Premios'];
-const LABELS=['Librería','Archivo - Correo - Enc.','Cadetería','Beneficios','Benef. CH - Almuerzos','Mantención Personal','Electricidad','Alquileres','Expensas','Mantenimiento Oficina','Automotores','Premios'];
+
+// Nombres EXACTAMENTE igual al COD_MAP de n8n (con tildes)
+const CUENTAS=[
+  'Librería',
+  'Archivo - Correo - Encomiendas',
+  'Cadetería',
+  'Beneficios',
+  'Beneficios CH - Almuerzos e Indumentaria',
+  'Manutención Personal',
+  'Electricidad',
+  'Alquileres',
+  'Expensas',
+  'Mantenimiento Oficina',
+  'Automotores',
+  'Premios'
+];
+
+const LABELS=[
+  'Librería',
+  'Archivo - Correo - Enc.',
+  'Cadetería',
+  'Beneficios',
+  'Benef. CH - Almuerzos',
+  'Manutención Personal',
+  'Electricidad',
+  'Alquileres',
+  'Expensas',
+  'Mantenimiento Oficina',
+  'Automotores',
+  'Premios'
+];
+
 const fiscalLabel=yr=>'Oct '+yr+' – Sep '+(yr+1);
 
 function makeYear(sy){
@@ -306,11 +336,24 @@ async function doSync(){
     if(!res.ok)throw new Error('Error '+res.status);
     var json=await res.json();
     if(!json.cuentas)throw new Error('Respuesta inesperada.');
+
+    // Cargar ejecutado por año
     [2025,2024,2023].forEach(function(yr){
-      if(json.cuentas[yr])CUENTAS.forEach(function(c){if(json.cuentas[yr][c])DATA[yr].cuentas[c].ejec=json.cuentas[yr][c];});
-      if(json.activeMeses&&json.activeMeses[yr])DATA[yr].meta.activeMeses=json.activeMeses[yr];
+      if(json.cuentas[yr]){
+        CUENTAS.forEach(function(c){
+          if(json.cuentas[yr][c]) DATA[yr].cuentas[c].ejec=json.cuentas[yr][c];
+        });
+      }
+      if(json.activeMeses&&json.activeMeses[yr]) DATA[yr].meta.activeMeses=json.activeMeses[yr];
     });
-    if(json.presupuesto)CUENTAS.forEach(function(c){if(json.presupuesto[c])DATA[2025].cuentas[c].presup=json.presupuesto[c];});
+
+    // Cargar presupuesto (ejercicio 2025)
+    if(json.presupuesto){
+      CUENTAS.forEach(function(c){
+        if(json.presupuesto[c]) DATA[2025].cuentas[c].presup=json.presupuesto[c];
+      });
+    }
+
     var now=new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     var statusText='Última actualización: '+now+' — datos reales de OneDrive';
     document.getElementById('sync-status').textContent=statusText;
