@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Presupuestario — Fyo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Poppins',sans-serif}
+html,body{height:100%;overflow:hidden;background:#EDF4F7}
+:root{--fyo:#008EAA;--fyo-dark:#006880;--fyo-light:#D6EEF3;--fyo-card:#E4F3F7}
+
+/* HEADER */
+.header{background:var(--fyo);padding:.9rem 2rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.header-title{color:#fff;font-size:18px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.header-sub{color:rgba(255,255,255,.8);font-size:10px;margin-top:2px;font-weight:500}
+.header-right{display:flex;align-items:center;gap:10px}
+
+/* NAV SLIDE */
+#slide-nav{display:flex;align-items:center;gap:8px}
+.snav-btn{background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.4);color:#fff;padding:5px 14px;border-radius:8px;font-size:11px;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;transition:all .2s}
+.snav-btn:hover{background:rgba(255,255,255,.25)}
+.snav-btn.active{background:#fff;color:var(--fyo)}
+.snav-arrow{background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.4);color:#fff;width:30px;height:30px;border-radius:8px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;font-family:'Poppins',sans-serif}
+.snav-arrow:hover{background:rgba(255,255,255,.3)}
+.snav-arrow:disabled{opacity:.3;cursor:not-allowed}
+
+/* MAIN AREA */
+#slides-wrap{flex:1;overflow:hidden;position:relative}
+#slides-track{display:flex;height:100%;transition:transform .45s cubic-bezier(.4,0,.2,1)}
+.slide{min-width:100%;height:100%;overflow-y:auto;padding:1.5rem 2rem}
+.slide::-webkit-scrollbar{width:4px}
+.slide::-webkit-scrollbar-thumb{background:var(--fyo-light);border-radius:2px}
+
+/* CARDS */
+.card{background:#fff;border-radius:14px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(0,142,170,.07)}
+.panel{background:var(--fyo-card);border-radius:14px;padding:1.25rem;margin-bottom:1rem;border:1.5px solid var(--fyo-light)}
+.slabel{font-size:11px;font-weight:700;color:var(--fyo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem}
+
+/* KPIs */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem}
+.kpi{background:var(--fyo-card);border-radius:14px;padding:1rem;text-align:center}
+.kpi-val{font-size:24px;font-weight:800;color:var(--fyo);line-height:1}
+.kpi-val.danger{color:#C0392B}.kpi-val.success{color:var(--fyo-dark)}
+.kpi-lbl{font-size:10px;font-weight:600;color:#5A7A85;margin-top:.35rem;text-transform:uppercase;letter-spacing:.05em}
+.kpi-sub{font-size:9px;color:#8AABB5;margin-top:.15rem}
+
+/* BOTONES */
+button{border-radius:8px;padding:6px 14px;font-size:11px;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;letter-spacing:.3px;transition:all .2s}
+.btn-action{background:var(--fyo-dark);color:#fff;border:none;padding:7px 16px}
+.btn-action:hover{background:#005060}
+.btn-outline{background:transparent;border:1.5px solid var(--fyo);color:var(--fyo)}
+.btn-outline:hover{background:var(--fyo-card)}
+
+/* TABLA */
+.tw{overflow-x:auto}
+table{width:100%;font-size:11px;border-collapse:collapse}
+th{text-align:left;font-size:10px;font-weight:700;color:var(--fyo);padding:.4rem .6rem;border-bottom:2px solid var(--fyo-light);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+td{padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;color:#2C4A52;font-size:11px}
+tr:hover td{background:#F5FBFC}
+
+/* BADGES */
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
+.badge-ok{background:#D4EDDA;color:#1A6B30}
+.badge-warn{background:#FFF3CD;color:#856404}
+.badge-danger{background:#FCEAEA;color:#C0392B}
+.badge-proj{background:#EEE8FF;color:#6B3FA0}
+.prog-bg{background:var(--fyo-light);border-radius:6px;height:7px;width:100%;overflow:hidden}
+.prog{height:7px;border-radius:6px}
+.chart-legend{display:flex;gap:14px;margin-bottom:10px;font-size:10px;font-weight:600;color:#5A7A85;flex-wrap:wrap}
+.legend-dot{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px}
+.view-tabs{display:flex;gap:5px;margin-bottom:.75rem}
+.view-tab{padding:4px 12px;font-size:10px;border-radius:8px;cursor:pointer;border:1.5px solid var(--fyo-light);color:#8AABB5;background:transparent;font-family:'Poppins',sans-serif;font-weight:600;text-transform:uppercase}
+.view-tab.active{background:var(--fyo);color:#fff;border-color:var(--fyo)}
+.macro-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+
+/* WRAPPER FLEX */
+#app{display:flex;flex-direction:column;height:100vh}
+
+/* SLIDE INDICADOR */
+#slide-counter{color:rgba(255,255,255,.6);font-size:10px;font-weight:600;min-width:40px;text-align:center}
+
+/* SYNC */
+.sync-bar{display:flex;align-items:center;gap:6px;padding:.4rem 2rem;font-size:10px;background:#fff;border-bottom:1px solid var(--fyo-light)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div class="header">
+  <div>
+    <div class="header-title">Dashboard Presupuestario</div>
+    <div class="header-sub">Ejercicio fiscal <span id="yr-lbl"></span> — Área Office Manager</div>
+  </div>
+  <div class="header-right">
+    <div id="slide-nav">
+      <button class="snav-arrow" id="btn-prev" onclick="prevSlide()">&#8592;</button>
+      <button class="snav-btn active" onclick="goSlide(0)">Resumen</button>
+      <button class="snav-btn" onclick="goSlide(1)">Mensual</button>
+      <button class="snav-btn" onclick="goSlide(2)">Cuentas</button>
+      <button class="snav-btn" onclick="goSlide(3)">Sensibilidad</button>
+      <button class="snav-btn" onclick="goSlide(4)">Macro</button>
+      <button class="snav-btn" onclick="goSlide(5)">Análisis IA</button>
+      <button class="snav-arrow" id="btn-next" onclick="nextSlide()">&#8594;</button>
+    </div>
+    <button class="btn-action" style="font-size:11px" onclick="doSync()">↻ Actualizar</button>
+  </div>
+</div>
+
+<div class="sync-bar">
+  <span style="width:7px;height:7px;border-radius:50%;background:var(--fyo);display:inline-block"></span>
+  <span id="sync-status" style="color:#5A7A85;font-weight:500">Sin sincronizar — datos de ejemplo activos</span>
+</div>
+
+<div id="slides-wrap">
+<div id="slides-track">
+
+<!-- SLIDE 0: RESUMEN -->
+<div class="slide" id="slide-0">
+  <div style="font-size:12px;font-weight:700;color:var(--fyo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Resumen ejecutivo</div>
+  <div class="kpi-grid" id="kpis"></div>
+  <div class="card">
+    <div class="slabel">Presupuesto vs. Ejecutado por mes</div>
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:rgba(0,142,170,.5)"></span>Presupuestado</span>
+      <span><span class="legend-dot" style="background:rgba(26,58,74,.5)"></span>Ejecutado</span>
+    </div>
+    <div style="position:relative;height:220px"><canvas id="mainChart"></canvas></div>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <div class="slabel">Ejecución por cuenta — vista rápida</div>
+    <div style="position:relative;height:220px"><canvas id="cuentasChartSmall"></canvas></div>
+  </div>
+</div>
+
+<!-- SLIDE 1: MENSUAL -->
+<div class="slide" id="slide-1">
+  <div style="font-size:12px;font-weight:700;color:var(--fyo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Presupuesto vs. Ejecutado por mes</div>
+  <div class="card">
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:rgba(0,142,170,.5)"></span>Presupuestado</span>
+      <span><span class="legend-dot" style="background:rgba(26,58,74,.5)"></span>Ejecutado</span>
+    </div>
+    <div style="position:relative;height:280px"><canvas id="mainChart2"></canvas></div>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <div class="slabel">Detalle mensual — todas las cuentas</div>
+    <div class="tw"><table id="monthTable"><thead></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<!-- SLIDE 2: CUENTAS -->
+<div class="slide" id="slide-2">
+  <div style="font-size:12px;font-weight:700;color:var(--fyo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Ejecución por cuenta</div>
+  <div class="card">
+    <div class="view-tabs">
+      <div class="view-tab active" onclick="switchView('barras',this)">Barras</div>
+      <div class="view-tab" onclick="switchView('tabla',this)">Tabla detalle</div>
+    </div>
+    <div id="view-barras"><div style="position:relative;height:420px"><canvas id="cuentasChart"></canvas></div></div>
+    <div id="view-tabla" style="display:none"><div class="tw" id="cuentas-table-wrap"></div></div>
+  </div>
+</div>
+
+<!-- SLIDE 3: SENSIBILIDAD -->
+<div class="slide" id="slide-3">
+  <div style="font-size:12px;font-weight:700;color:var(--fyo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Sensibilidad presupuestaria</div>
+  <div class="card">
+    <div class="slabel">Drivers reales vs. presupuestados</div>
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:rgba(0,142,170,.5)"></span>Presupuesto original</span>
+      <span><span class="legend-dot" style="background:rgba(230,126,34,.7)"></span>Reajustado IPC/TC real</span>
+      <span><span class="legend-dot" style="background:rgba(26,58,74,.5)"></span>Ejecutado real</span>
+    </div>
+    <div style="font-size:10px;color:#8AABB5;font-weight:500;margin-bottom:10px">Alquileres y Expensas ajustan por TC · Resto por IPC</div>
+    <div style="position:relative;height:260px"><canvas id="sensChart"></canvas></div>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <div class="slabel">Tabla de sensibilidad por cuenta</div>
+    <div class="tw" id="sens-table-wrap"></div>
+  </div>
+</div>
+
+<!-- SLIDE 4: MACRO -->
+<div class="slide" id="slide-4">
+  <div style="font-size:12px;font-weight:700;color:var(--fyo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Indicadores macroeconómicos</div>
+  <div class="macro-grid">
+    <div class="card" style="margin:0">
+      <div class="slabel">IPC mensual (%) <span id="ipc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:4px;display:none">★ May-Sep proyectado por IA</span></div>
+      <div style="position:relative;height:200px"><canvas id="ipcChart"></canvas></div>
+    </div>
+    <div class="card" style="margin:0">
+      <div class="slabel">Tipo de cambio USD/ARS <span id="tc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:4px;display:none">★ May-Sep proyectado por IA</span></div>
+      <div style="position:relative;height:200px"><canvas id="tcChart"></canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <div class="slabel">Drivers presupuestados vs. reales</div>
+    <div class="tw">
+      <table style="width:100%;font-size:11px;border-collapse:collapse">
+        <thead><tr>
+          <th>Mes</th><th style="text-align:right">IPC Presup.</th><th style="text-align:right">IPC Real</th><th style="text-align:right">Δ IPC</th>
+          <th style="text-align:right">TC Presup.</th><th style="text-align:right">TC Real</th><th style="text-align:right">Δ TC</th>
+        </tr></thead>
+        <tbody id="macro-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 5: ANÁLISIS IA -->
+<div class="slide" id="slide-5">
+  <div style="font-size:12px;font-weight:700;color:var(--fyo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.75rem">Análisis inteligente</div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem">
+      <div>
+        <div class="slabel" style="margin-bottom:2px">Generado por Claude AI</div>
+        <div style="font-size:10px;color:#8AABB5;font-weight:500">Análisis ejecutivo · Proyección IPC y TC · Alertas y recomendaciones</div>
+      </div>
+      <button class="btn-action" id="ai-btn" onclick="runAI()">✦ Analizar con IA</button>
+    </div>
+    <div id="ai-output" style="font-size:12px;color:#5A7A85;line-height:1.8;min-height:60px">
+      <span style="color:#8AABB5">Hacé clic en "Analizar con IA" para generar un análisis ejecutivo y proyectar IPC y TC futuros.</span>
+    </div>
+  </div>
+  <div class="macro-grid">
+    <div class="card" style="margin:0">
+      <div class="slabel">KPIs del ejercicio</div>
+      <div id="ai-kpis-detail"></div>
+    </div>
+    <div class="card" style="margin:0">
+      <div class="slabel">Top cuentas por ejecución</div>
+      <div id="ai-top-cuentas"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /slides-track -->
+</div><!-- /slides-wrap -->
+
+</div><!-- /app -->
+
+<script>
+const WEBHOOK='https://fyo.app.n8n.cloud/webhook/presupuesto-data';
+const ML=['Oct','Nov','Dic','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep'];
+const CUENTAS=['Librería','Archivo - Correo - Encomiendas','Cadetería','Beneficios','Beneficios CH - Almuerzos e Indumentaria','Manutención Personal','Electricidad','Alquileres','Expensas','Mantenimiento Oficina','Automotores','Premios'];
+const LABELS=['Librería','Archivo - Correo - Enc.','Cadetería','Beneficios','Benef. CH - Almuerzos','Manutención Personal','Electricidad','Alquileres','Expensas','Mantenimiento Oficina','Automotores','Premios'];
+const AJUSTE_TC=['Alquileres','Expensas'];
+const fiscalLabel=yr=>'Oct '+yr+' – Sep '+(yr+1);
+const IPC_REAL_2025=[2.3,2.5,2.8,2.9,2.9,3.4,2.6,0,0,0,0,0];
+const TC_REAL_2025=[1475,1475,1480,1415,1420,1405,1415,0,0,0,0,0];
+const IPC_PRESUP_2025=[2.0,2.5,3.0,2.5,2.0,1.5,1.5,1.5,1.5,1.5,1.5,1.5];
+const TC_PRESUP_2025=[1442.55,1474.98,1510.97,1540.53,1562.67,1586.88,1615.16,1629.51,1652.93,1687.93,1715.01,1732.66];
+
+function makeYear(sy){
+  const s={2023:.55,2024:.75,2025:1}[sy]||1;
+  const bp=[80,60,120,200,180,150,300,250,80,100,120,350];
+  const ipcD={2024:[4.0,3.5,3.5,2.9,2.4,2.7,2.3,2.1,2.6,2.8,2.4,2.2],2023:[7.0,8.3,25.5,20.6,13.2,8.8,8.0,4.0,4.6,12.8,12.4,25.5]};
+  const tcD={2024:[910,935,960,975,990,1010,1055,1060,1075,1100,1120,1145],2023:[350,362,374,450,490,528,560,610,680,750,830,920]};
+  const am=sy===2025?7:12;
+  const ipc=sy===2025?[...IPC_REAL_2025]:ipcD[sy]||Array(12).fill(2);
+  const tc=sy===2025?[...TC_REAL_2025]:tcD[sy]||Array(12).fill(1000);
+  const obj={meta:{activeMeses:am},macro:{ipc,tc},cuentas:{}};
+  CUENTAS.forEach((c,i)=>{
+    const bk=Math.round(bp[i]*s);
+    obj.cuentas[c]={
+      presup:Array.from({length:12},()=>Math.round(bk*(0.9+Math.random()*.2))),
+      ejec:Array.from({length:12},(_,mi)=>mi<am?Math.round(bk*(0.85+Math.random()*.3)):0)
+    };
+  });
+  return obj;
+}
+
+let DATA={2025:makeYear(2025),2024:makeYear(2024),2023:makeYear(2023)};
+let CY=2025,CURR='ARS',charts={};
+
+function getTC(yr,mi){const a=DATA[yr].macro.tc;if(a[mi]>0)return a[mi];for(let i=mi-1;i>=0;i--)if(a[i]>0)return a[i];return a.find(v=>v>0)||1;}
+function conv(v,yr,mi){return CURR==='ARS'?v:v/getTC(yr,mi);}
+function fmtV(v){return CURR==='ARS'?'$'+Math.round(v).toLocaleString('es-AR'):'U$S '+Math.round(v).toLocaleString('es-AR');}
+function fmtK(v){return CURR==='ARS'?'$'+Math.round(v/1000).toLocaleString('es-AR')+'k':'U$S '+Math.round(v/1000).toLocaleString('es-AR')+'k';}
+function axFmt(v){return CURR==='ARS'?'$'+Math.round(v/1000)+'k':'U$S '+Math.round(v/1000)+'k';}
+function nm(yr){return DATA[yr].meta.activeMeses;}
+function sumF(yr,field,lim){return CUENTAS.reduce((s,c)=>s+DATA[yr].cuentas[c][field].slice(0,lim).reduce((a,v,mi)=>a+conv(v,yr,mi),0),0);}
+function mSum(yr,mi,f){return CUENTAS.reduce((s,c)=>s+conv(DATA[yr].cuentas[c][f][mi],yr,mi),0);}
+function gc(){return'rgba(0,142,170,.07)';}
+function tcol(){return'#8AABB5';}
+
+function calcPresupReajustado(yr,mi){
+  if(yr!==2025)return mSum(yr,mi,'presup');
+  var iR=DATA[yr].macro.ipc[mi],tR=DATA[yr].macro.tc[mi],iP=IPC_PRESUP_2025[mi],tP=TC_PRESUP_2025[mi];
+  var fIPC=(iR>0&&iP>0)?(1+iR/100)/(1+iP/100):1;
+  var fTC=(tR>0&&tP>0)?tR/tP:1;
+  return CUENTAS.reduce(function(s,c){var f=AJUSTE_TC.indexOf(c)>=0?fTC:fIPC;return s+conv(DATA[yr].cuentas[c].presup[mi],yr,mi)*f;},0);
+}
+
+// CARRUSEL
+var currentSlide=0;
+var navBtns=document.querySelectorAll('.snav-btn');
+
+function goSlide(n){
+  currentSlide=n;
+  document.getElementById('slides-track').style.transform='translateX(-'+n*100+'%)';
+  navBtns.forEach((b,i)=>b.classList.toggle('active',i===n));
+  document.getElementById('btn-prev').disabled=n===0;
+  document.getElementById('btn-next').disabled=n===5;
+  // Redimensionar charts al cambiar slide
+  setTimeout(function(){Object.values(charts).forEach(function(c){if(c&&c.resize)c.resize();});},50);
+}
+function nextSlide(){if(currentSlide<5)goSlide(currentSlide+1);}
+function prevSlide(){if(currentSlide>0)goSlide(currentSlide-1);}
+
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowRight')nextSlide();
+  if(e.key==='ArrowLeft')prevSlide();
+});
+
+// RENDERS
+function renderKPIs(yr){
+  const tp=sumF(yr,'presup',12),te=sumF(yr,'ejec',nm(yr));
+  const dev=te-tp,pct=Math.round(te/tp*100),dp=Math.round(dev/tp*100);
+  document.getElementById('kpis').innerHTML=[
+    {l:'Presupuesto total',v:fmtK(tp*1000),s:'Ejercicio completo'},
+    {l:'Ejecutado acumulado',v:fmtK(te*1000),s:'Hasta '+ML[nm(yr)-1],c:te>tp?'danger':'success'},
+    {l:'Desvío',v:(dev>=0?'+':'')+fmtK(dev*1000),s:(dp>=0?'+':'')+dp+'% del presupuesto',c:dev>0?'danger':'success'},
+    {l:'% Ejecución',v:pct+'%',s:'Sobre presupuesto anual',c:pct>100?'danger':pct>80?'':'success'},
+  ].map(k=>'<div class="kpi"><div class="kpi-val '+(k.c||'')+'">'+k.v+'</div><div class="kpi-lbl">'+k.l+'</div><div class="kpi-sub">'+k.s+'</div></div>').join('');
+}
+
+function buildBarCfg(pD,eD,horizontal){
+  var axis=horizontal?{indexAxis:'y'}:{};
+  var xKey=horizontal?'x':'y',yKey=horizontal?'y':'x';
+  return Object.assign({type:'bar',data:{labels:ML,datasets:[
+    {label:'Presupuestado',data:pD,backgroundColor:'rgba(0,142,170,.18)',borderColor:'#008EAA',borderWidth:1.5,borderRadius:5},
+    {label:'Ejecutado',data:eD,backgroundColor:'rgba(26,58,74,.2)',borderColor:'#1A3A4A',borderWidth:1.5,borderRadius:5}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+fmtV(ctx.parsed[horizontal?'x':'y'])}}},scales:{
+    x:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Poppins',weight:'600'},autoSkip:horizontal?true:false,callback:horizontal?axFmt:undefined}},
+    y:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Poppins'},callback:horizontal?undefined:axFmt},beginAtZero:true}
+  }}},axis);
+}
+
+function renderMainChart(yr,id){
+  const pD=Array.from({length:12},(_,i)=>mSum(yr,i,'presup')*1000);
+  const eD=Array.from({length:12},(_,i)=>{const v=mSum(yr,i,'ejec');return v>0?v*1000:null;});
+  const k=id==='mainChart'?'main':'main2';
+  if(charts[k])charts[k].destroy();
+  charts[k]=new Chart(document.getElementById(id),buildBarCfg(pD,eD,false));
+}
+
+function renderCuentasChart(yr,id,small){
+  const lbs=LABELS.map(c=>c.length>18?c.slice(0,16)+'…':c);
+  const pD=CUENTAS.map(c=>DATA[yr].cuentas[c].presup.reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000);
+  const eD=CUENTAS.map(c=>DATA[yr].cuentas[c].ejec.slice(0,nm(yr)).reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000);
+  const elId=id||'cuentasChart';
+  const k=small?'cuentasSmall':'cuentas';
+  if(charts[k])charts[k].destroy();
+  const cfg=buildBarCfg(pD,eD,true);
+  cfg.data.labels=lbs;
+  if(!small){
+    const el=document.querySelector('#view-barras div');
+    if(el)el.style.height=(CUENTAS.length*46+80)+'px';
+  }
+  charts[k]=new Chart(document.getElementById(elId),cfg);
+}
+
+function renderSensChart(yr){
+  const presupOrig=Array.from({length:12},(_,i)=>mSum(yr,i,'presup')*1000);
+  const presupReaj=Array.from({length:12},(_,i)=>calcPresupReajustado(yr,i)*1000);
+  const ejecutado=Array.from({length:12},(_,i)=>{const v=mSum(yr,i,'ejec');return v>0?v*1000:null;});
+  const presupReajVis=presupReaj.map((v,i)=>(DATA[yr].macro.ipc[i]>0||DATA[yr].macro.tc[i]>0)?v:null);
+  const cfg={type:'bar',data:{labels:ML,datasets:[
+    {label:'Presupuesto original',data:presupOrig,backgroundColor:'rgba(0,142,170,.15)',borderColor:'#008EAA',borderWidth:1.5,borderRadius:5,order:3},
+    {label:'Reajustado',data:presupReajVis,backgroundColor:'rgba(230,126,34,.25)',borderColor:'#E67E22',borderWidth:2,borderRadius:5,order:2},
+    {label:'Ejecutado real',type:'line',data:ejecutado,borderColor:'#1A3A4A',backgroundColor:'transparent',borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#1A3A4A',pointBorderColor:'#fff',pointBorderWidth:2,tension:.3,order:1}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+fmtV(ctx.parsed.y)}}},scales:{x:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Poppins',weight:'600'},autoSkip:false}},y:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Poppins'},callback:axFmt},beginAtZero:true}}}};
+  if(charts.sens)charts.sens.destroy();
+  charts.sens=new Chart(document.getElementById('sensChart'),cfg);
+}
+
+function renderSensTable(yr){
+  var html='<table style="width:100%;font-size:11px;border-collapse:collapse"><thead><tr>';
+  ['Cuenta','Driver','Presup. anual','Reajustado','Ejecutado','Desvío','Avance'].forEach((c,i)=>html+='<th style="padding:.4rem .6rem;border-bottom:2px solid var(--fyo-light);text-align:'+(i>1?'right':'left')+'">'+c+'</th>');
+  html+='</tr></thead><tbody>';
+  CUENTAS.forEach((c,ci)=>{
+    var p=DATA[yr].cuentas[c].presup.reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000;
+    var e=DATA[yr].cuentas[c].ejec.slice(0,nm(yr)).reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000;
+    var r=Array.from({length:12},(_,mi)=>{
+      var iR=DATA[yr].macro.ipc[mi],tR=DATA[yr].macro.tc[mi],iP=IPC_PRESUP_2025[mi],tP=TC_PRESUP_2025[mi];
+      var f=yr===2025?(AJUSTE_TC.indexOf(c)>=0?((tR>0&&tP>0)?tR/tP:1):((iR>0&&iP>0)?(1+iR/100)/(1+iP/100):1)):1;
+      return conv(DATA[yr].cuentas[c].presup[mi],yr,mi)*f*1000;
+    }).reduce((a,v)=>a+v,0);
+    var dev=e-p,pb=Math.min(Math.round(e/p*100),130);
+    var badge=pb>105?'badge-danger':pb>90?'badge-warn':'badge-ok';
+    var badgeTxt=pb>105?'Excedido':pb>90?'Atención':'OK';
+    html+='<tr>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;font-weight:600;color:#2C4A52">'+LABELS[ci]+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7"><span class="badge '+(yr===2025?(AJUSTE_TC.indexOf(c)>=0?'badge-warn':'badge-ok'):'')+'">'+((yr===2025)?(AJUSTE_TC.indexOf(c)>=0?'TC':'IPC'):'—')+'</span></td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:#5A7A85">'+fmtV(p)+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:#E67E22;font-weight:600">'+fmtV(r)+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;font-weight:600;color:#2C4A52">'+(e>0?fmtV(e):'—')+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:'+(dev>0?'#C0392B':'#1A6B30')+';font-weight:600">'+(e>0?(dev>=0?'+':'')+fmtV(dev):'—')+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7">'+(e>0?'<div style="display:flex;align-items:center;gap:6px"><div class="prog-bg" style="flex:1;min-width:50px"><div class="prog" style="width:'+Math.min(pb,100)+'%;background:'+(pb>105?'#E74C3C':pb>90?'#F39C12':'#008EAA')+'"></div></div><span class="badge '+badge+'">'+badgeTxt+'</span></div>':'<span style="color:#8AABB5;font-size:10px">Pendiente</span>')+'</td>'
+      +'</tr>';
+  });
+  document.getElementById('cuentas-table-wrap').innerHTML=html+'</tbody></table>';
+  document.getElementById('sens-table-wrap').innerHTML=html+'</tbody></table>';
+}
+
+function renderMonthTable(yr){
+  var t=document.getElementById('monthTable');
+  var hd='<tr><th>Mes</th>';
+  LABELS.forEach(c=>hd+='<th style="text-align:right">'+(c.length>12?c.slice(0,11)+'…':c)+'</th>');
+  hd+='<th style="text-align:right">Total</th></tr>';
+  t.querySelector('thead').innerHTML=hd;
+  var bd='';
+  for(var i=0;i<12;i++){
+    var pend=CUENTAS.every(c=>DATA[yr].cuentas[c].ejec[i]===0);
+    var tot=CUENTAS.reduce((s,c)=>s+conv(DATA[yr].cuentas[c].ejec[i],yr,i),0);
+    bd+='<tr><td style="font-weight:700;color:var(--fyo)">'+ML[i]+'</td>';
+    CUENTAS.forEach(c=>{var v=conv(DATA[yr].cuentas[c].ejec[i],yr,i);bd+='<td style="text-align:right;'+(pend?'color:#8AABB5':'')+'">'+(v>0?fmtV(v*1000):'—')+'</td>';});
+    bd+='<td style="text-align:right;font-weight:700;'+(pend?'color:#8AABB5':'color:#2C4A52')+'">'+(pend?'—':fmtV(tot*1000))+'</td></tr>';
+  }
+  t.querySelector('tbody').innerHTML=bd;
+}
+
+function renderMacro(yr){
+  var d=DATA[yr].macro;
+  var primerFuturo=d.ipc.findIndex(v=>v===0);
+  var opts=cb=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Poppins',weight:'600'}}},y:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Poppins'},callback:cb}}}});
+  var ipcCfg={type:'bar',data:{labels:ML,datasets:[
+    {label:'IPC real',data:d.ipc.map(v=>v>0?v:null),backgroundColor:d.ipc.map((v,i)=>i>=primerFuturo&&primerFuturo>=0?'rgba(107,63,160,.35)':'rgba(0,142,170,.7)'),borderColor:d.ipc.map((v,i)=>i>=primerFuturo&&primerFuturo>=0?'rgba(107,63,160,.8)':'#008EAA'),borderWidth:1.5,borderRadius:4},
+    {label:'IPC presupuestado',type:'line',data:IPC_PRESUP_2025,borderColor:'#E67E22',backgroundColor:'transparent',borderWidth:2,borderDash:[4,3],pointRadius:3,pointBackgroundColor:'#E67E22',tension:.3}
+  ]},options:opts(v=>v+'%')};
+  var tcCfg={type:'line',data:{labels:ML,datasets:[
+    {label:'TC real',data:d.tc.map(v=>v>0?v:null),borderColor:'#1A3A4A',backgroundColor:'rgba(26,58,74,.06)',tension:.4,pointRadius:4,pointBackgroundColor:'#1A3A4A',pointBorderColor:'#fff',pointBorderWidth:2,fill:true,borderWidth:2},
+    {label:'TC proyectado',data:d.tc.map((v,i)=>i>=primerFuturo&&primerFuturo>=0&&v>0?v:null),borderColor:'rgba(107,63,160,.8)',backgroundColor:'rgba(107,63,160,.04)',tension:.4,pointRadius:4,pointBackgroundColor:'rgba(107,63,160,.8)',pointBorderColor:'#fff',pointBorderWidth:2,fill:true,borderWidth:2,borderDash:[5,4]},
+    {label:'TC presupuestado',data:TC_PRESUP_2025,borderColor:'#E67E22',backgroundColor:'transparent',tension:.3,pointRadius:3,pointBackgroundColor:'#E67E22',borderWidth:2,borderDash:[4,3]}
+  ]},options:opts(v=>'$'+v)};
+  if(charts.ipc)charts.ipc.destroy();charts.ipc=new Chart(document.getElementById('ipcChart'),ipcCfg);
+  if(charts.tc)charts.tc.destroy();charts.tc=new Chart(document.getElementById('tcChart'),tcCfg);
+  var tieneProy=d.ipc.some((v,i)=>i>6&&v>0);
+  document.getElementById('ipc-badge').style.display=tieneProy?'inline':'none';
+  document.getElementById('tc-badge').style.display=tieneProy?'inline':'none';
+  // Tabla macro
+  var bd='';
+  ML.forEach((m,i)=>{
+    var iR=d.ipc[i],tR=d.tc[i],iP=IPC_PRESUP_2025[i],tP=TC_PRESUP_2025[i];
+    var dipc=iR>0?((iR-iP).toFixed(1)):null,dtc=tR>0?(Math.round(tR-tP)):null;
+    bd+='<tr>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;font-weight:700;color:var(--fyo)">'+m+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:#8AABB5">'+iP.toFixed(1)+'%</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:#2C4A52;font-weight:600">'+(iR>0?iR.toFixed(1)+'%':'—')+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:'+(dipc?dipc>0?'#C0392B':'#1A6B30':'#8AABB5')+';font-weight:600">'+(dipc?(dipc>0?'+':'')+dipc+'%':'—')+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:#8AABB5">$'+Math.round(tP).toLocaleString('es-AR')+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:#2C4A52;font-weight:600">'+(tR>0?'$'+tR.toLocaleString('es-AR'):'—')+'</td>'
+      +'<td style="padding:.4rem .6rem;border-bottom:1px solid #EDF4F7;text-align:right;color:'+(dtc?dtc>0?'#C0392B':'#1A6B30':'#8AABB5')+';font-weight:600">'+(dtc?(dtc>0?'+':'')+dtc.toLocaleString('es-AR'):'—')+'</td>'
+      +'</tr>';
+  });
+  document.getElementById('macro-table-body').innerHTML=bd;
+}
+
+function renderAIExtra(yr){
+  var tp=sumF(yr,'presup',12),te=sumF(yr,'ejec',nm(yr));
+  var dev=te-tp,pct=Math.round(te/tp*100);
+  document.getElementById('ai-kpis-detail').innerHTML=[
+    {l:'Presupuesto anual',v:fmtK(tp*1000)},
+    {l:'Ejecutado hasta '+ML[nm(yr)-1],v:fmtK(te*1000)},
+    {l:'Desvío acumulado',v:(dev>=0?'+':'')+fmtK(dev*1000),c:dev>0?'#C0392B':'#1A6B30'},
+    {l:'% Ejecución',v:pct+'%',c:pct>100?'#C0392B':pct>80?'#F39C12':'#008EAA'},
+    {l:'Meses ejecutados',v:nm(yr)+' de 12'},
+  ].map(k=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid #EDF4F7"><span style="font-size:11px;color:#8AABB5;font-weight:500">'+k.l+'</span><span style="font-size:12px;font-weight:700;color:'+(k.c||'#2C4A52')+'">'+k.v+'</span></div>').join('');
+
+  var sorted=CUENTAS.map((c,ci)=>{
+    var p=DATA[yr].cuentas[c].presup.reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000;
+    var e=DATA[yr].cuentas[c].ejec.slice(0,nm(yr)).reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000;
+    return{l:LABELS[ci],p,e,pct:Math.round(e/p*100)};
+  }).filter(x=>x.e>0).sort((a,b)=>b.pct-a.pct);
+
+  document.getElementById('ai-top-cuentas').innerHTML=sorted.slice(0,6).map(x=>{
+    var badge=x.pct>100?'badge-danger':x.pct>80?'badge-warn':'badge-ok';
+    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid #EDF4F7"><span style="font-size:11px;color:#2C4A52;font-weight:600">'+(x.l.length>22?x.l.slice(0,20)+'…':x.l)+'</span><span class="badge '+badge+'">'+x.pct+'%</span></div>';
+  }).join('');
+}
+
+function render(yr){
+  CY=yr;
+  document.getElementById('yr-lbl').textContent=fiscalLabel(yr);
+  renderKPIs(yr);
+  renderMainChart(yr,'mainChart');
+  renderMainChart(yr,'mainChart2');
+  renderCuentasChart(yr,'cuentasChartSmall',true);
+  renderCuentasChart(yr,'cuentasChart',false);
+  renderSensChart(yr);
+  renderSensTable(yr);
+  renderMonthTable(yr);
+  renderMacro(yr);
+  renderAIExtra(yr);
+}
+
+function switchView(v,el){
+  document.querySelectorAll('.view-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('view-barras').style.display=v==='barras'?'':'none';
+  document.getElementById('view-tabla').style.display=v==='tabla'?'':'none';
+  if(v==='barras'&&charts.cuentas)setTimeout(()=>charts.cuentas.resize(),50);
+}
+
+async function doSync(){
+  var errBar=document.getElementById('sync-error-bar');
+  document.getElementById('sync-status').textContent='Conectando con OneDrive vía n8n…';
+  try{
+    var res=await fetch(WEBHOOK);
+    if(!res.ok)throw new Error('Error '+res.status);
+    var json=await res.json();
+    if(!json.cuentas)throw new Error('Respuesta inesperada.');
+    [2025,2024,2023].forEach(yr=>{
+      if(json.cuentas[yr])CUENTAS.forEach(c=>{if(json.cuentas[yr][c])DATA[yr].cuentas[c].ejec=json.cuentas[yr][c];});
+      if(json.activeMeses&&json.activeMeses[yr])DATA[yr].meta.activeMeses=json.activeMeses[yr];
+    });
+    if(json.presupuesto)CUENTAS.forEach(c=>{if(json.presupuesto[c])DATA[2025].cuentas[c].presup=json.presupuesto[c];});
+    DATA[2025].macro.ipc=IPC_REAL_2025.slice();
+    DATA[2025].macro.tc=TC_REAL_2025.slice();
+    var now=new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    document.getElementById('sync-status').textContent='Última actualización: '+now+' — datos reales de OneDrive';
+    render(CY);
+  }catch(e){
+    document.getElementById('sync-status').textContent='Error al sincronizar: '+e.message;
+  }
+}
+
+async function runAI(){
+  var btn=document.getElementById('ai-btn');
+  var out=document.getElementById('ai-output');
+  btn.disabled=true;btn.textContent='Analizando...';
+  out.innerHTML='<span style="color:#8AABB5">Generando análisis y proyecciones con IA...</span>';
+  var yr=CY,n=nm(yr);
+  var totPresup=sumF(yr,'presup',12)*1000,totEjec=sumF(yr,'ejec',n)*1000;
+  var pctTotal=Math.round(totEjec/totPresup*100);
+  var cuentasResumen=CUENTAS.map((c,ci)=>{
+    var p=DATA[yr].cuentas[c].presup.reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000;
+    var e=DATA[yr].cuentas[c].ejec.slice(0,n).reduce((a,v,mi)=>a+conv(v,yr,mi),0)*1000;
+    return'- '+LABELS[ci]+': presup $'+Math.round(p/1000).toLocaleString('es-AR')+'k, ejec $'+Math.round(e/1000).toLocaleString('es-AR')+'k ('+Math.round(e/p*100)+'%)';
+  }).join('\n');
+  var ipcReal=IPC_REAL_2025.filter(v=>v>0);
+  var mesesFaltantes=ML.slice(ipcReal.length);
+  var prompt='Sos un especialista en finanzas argentinas. Dos tareas:\n\n**TAREA 1 — Análisis presupuestario**\nEjercicio Oct 2025-Sep 2026 ('+n+' meses ejecutados de 12, hasta '+ML[n-1]+'):\n- Presupuesto anual: $'+Math.round(totPresup/1000).toLocaleString('es-AR')+'k\n- Ejecutado: $'+Math.round(totEjec/1000).toLocaleString('es-AR')+'k ('+pctTotal+'%)\n- IPC real acumulado: '+ipcReal.join(', ')+'%\n- TC BNA real: '+TC_REAL_2025.filter(v=>v>0).map(v=>'$'+v).join(', ')+'\nDesglose:\n'+cuentasResumen+'\n\n**TAREA 2 — Proyección macroeconómica**\nProyectá: '+mesesFaltantes.join(', ')+'\nContexto: acuerdo FMI, banda cambiaria, convergencia inflacionaria.\nRespondé con análisis ejecutivo (máx 200 palabras) y JSON:\n```json\n{"ipc_proyectado":[v1,v2,...],"tc_proyectado":[v1,v2,...]}\n```\nArrays de '+mesesFaltantes.length+' valores. IPC en % mensual, TC en pesos venta BNA fin de mes.';
+  try{
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,messages:[{role:'user',content:prompt}]})});
+    var data=await res.json();
+    var text=data.content&&data.content[0]?data.content[0].text:'No se pudo generar el análisis.';
+    var jsonMatch=text.match(/```json\s*([\s\S]*?)\s*```/);
+    if(jsonMatch){
+      try{
+        var proj=JSON.parse(jsonMatch[1]);
+        var ipcC=IPC_REAL_2025.slice(),tcC=TC_REAL_2025.slice();
+        var si=ipcReal.length;
+        proj.ipc_proyectado.forEach((v,i)=>{if(si+i<12)ipcC[si+i]=v;});
+        proj.tc_proyectado.forEach((v,i)=>{if(si+i<12)tcC[si+i]=v;});
+        DATA[2025].macro.ipc=ipcC;DATA[2025].macro.tc=tcC;
+        renderMacro(2025);renderSensChart(2025);
+      }catch(e){console.warn('JSON parse error',e);}
+    }
+    var display=text.replace(/```json[\s\S]*?```/g,'').trim();
+    out.innerHTML=display.replace(/\n\n/g,'<br><br>').replace(/\*\*(.*?)\*\*/g,'<strong style="color:#2C4A52">$1</strong>').replace(/\n/g,'<br>');
+  }catch(e){
+    out.innerHTML='<span style="color:#C0392B">Error al conectar con la IA.</span>';
+  }finally{
+    btn.disabled=false;btn.textContent='✦ Analizar con IA';
+  }
+}
+
+window.addEventListener('load',()=>{render(2025);goSlide(0);});
+window.addEventListener('resize',()=>{setTimeout(()=>{Object.values(charts).forEach(c=>{if(c&&c.resize)c.resize();});},100);});
+</script>
+</body>
+</html>
