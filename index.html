@@ -557,9 +557,15 @@ async function runAI(){
     +'Arrays de '+mesesFaltantes.length+' valores para '+mesesFaltantes.join(', ')+'. IPC en % mensual, TC en pesos venta BNA fin de mes.';
 
   try{
-    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,messages:[{role:'user',content:prompt}]})});
+    // Llamada via n8n webhook — resuelve el problema de CORS
+    var res=await fetch('https://fyo.app.n8n.cloud/webhook/dashboard-ai',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt:prompt})
+    });
+    if(!res.ok)throw new Error('Error HTTP '+res.status);
     var data=await res.json();
-    var text=data.content&&data.content[0]?data.content[0].text:'No se pudo generar el análisis.';
+    var text=data.texto||data.text||'No se pudo generar el análisis.';
     var jsonMatch=text.match(/```json\s*([\s\S]*?)\s*```/);
     if(jsonMatch){
       try{
@@ -573,12 +579,17 @@ async function runAI(){
         DATA[2025].macro.tc=tcCompleto;
         renderMacro(2025);
         renderSensChart(2025);
+        document.getElementById('ipc-badge').style.display='inline';
+        document.getElementById('tc-badge').style.display='inline';
       }catch(e){console.warn('No se pudo parsear proyección',e);}
     }
     var displayText=text.replace(/```json[\s\S]*?```/g,'').trim();
-    out.innerHTML=displayText.replace(/\n\n/g,'<br><br>').replace(/\*\*(.*?)\*\*/g,'<strong style="color:#2C4A52">$1</strong>').replace(/\n/g,'<br>');
+    out.innerHTML=displayText
+      .replace(/\n\n/g,'<br><br>')
+      .replace(/\*\*(.*?)\*\*/g,'<strong style="color:#2C4A52">$1</strong>')
+      .replace(/\n/g,'<br>');
   }catch(e){
-    out.innerHTML='<span style="color:#C0392B">Error al conectar con la IA.</span>';
+    out.innerHTML='<span style="color:#C0392B">Error: '+e.message+'</span>';
   }finally{
     btn.disabled=false;btn.textContent='✦ Analizar con IA';
   }
