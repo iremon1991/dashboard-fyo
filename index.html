@@ -63,6 +63,8 @@ button{border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-fam
 input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding:4px 6px;font-size:12px;font-family:'Montserrat',sans-serif;color:#2C4A52;width:100%}
 .chart-legend{display:flex;gap:16px;margin-bottom:12px;font-size:11px;font-weight:600;color:#5A7A85;flex-wrap:wrap}
 .legend-dot{width:12px;height:12px;border-radius:3px;display:inline-block;margin-right:5px}
+.save-toast{position:fixed;bottom:20px;right:20px;background:#1A6B30;color:#fff;padding:10px 18px;border-radius:8px;font-size:12px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.15);opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none;z-index:999}
+.save-toast.show{opacity:1;transform:translateY(0)}
 </style>
 </head>
 <body>
@@ -171,10 +173,12 @@ input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding
 </div>
 
 </div>
+<div class="save-toast" id="save-toast">✓ Guardado</div>
 
 <script>
 const WEBHOOK='https://fyo.app.n8n.cloud/webhook/presupuesto-data';
 const ML=['Oct','Nov','Dic','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep'];
+const STORAGE_KEY='fyo-dashboard-data-v1';
 
 const CUENTAS=[
   'Librería','Archivo - Correo - Encomiendas','Cadetería','Beneficios',
@@ -220,7 +224,35 @@ function makeYear(sy){
   return obj;
 }
 
-let DATA={2025:makeYear(2025),2024:makeYear(2024),2023:makeYear(2023)};
+// --- Persistencia local (localStorage) ---
+// Antes: DATA se regeneraba de cero (con valores aleatorios de ejemplo) en
+// cada carga de página, así que cualquier edición manual se perdía al refrescar.
+// Ahora: si hay datos guardados en este navegador, se usan esos; si no, se
+// generan los datos de ejemplo (solo la primera vez).
+function loadSavedData(){
+  try{
+    var raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    var parsed=JSON.parse(raw);
+    if(!parsed || !parsed[2025] || !parsed[2024] || !parsed[2023]) return null;
+    return parsed;
+  }catch(e){return null;}
+}
+function saveData(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA));
+    showSaveToast();
+  }catch(e){console.warn('No se pudo guardar en localStorage',e);}
+}
+function showSaveToast(){
+  var t=document.getElementById('save-toast');
+  if(!t)return;
+  t.classList.add('show');
+  clearTimeout(showSaveToast._tid);
+  showSaveToast._tid=setTimeout(function(){t.classList.remove('show');},2000);
+}
+
+let DATA=loadSavedData()||{2025:makeYear(2025),2024:makeYear(2024),2023:makeYear(2023)};
 let CY=2025,CURR='ARS',charts={},presupTab=0;
 
 // Calcula presupuesto reajustado por drivers reales para un mes
@@ -513,6 +545,7 @@ async function doSync(){
     var statusText='Última actualización: '+now+' — datos reales de OneDrive';
     document.getElementById('sync-status').textContent=statusText;
     try{localStorage.setItem('fyo-last-sync',statusText);}catch(e){}
+    saveData();
     render(CY);
   }catch(e){
     errBar.textContent='Error al sincronizar: '+e.message;
@@ -577,6 +610,7 @@ async function runAI(){
         proj.tc_proyectado.forEach(function(v,i){if(startIdx+i<12)tcCompleto[startIdx+i]=v;});
         DATA[2025].macro.ipc=ipcCompleto;
         DATA[2025].macro.tc=tcCompleto;
+        saveData();
         renderMacro(2025);
         renderSensChart(2025);
         document.getElementById('ipc-badge').style.display='inline';
@@ -648,6 +682,7 @@ function savePresup(){
     }
     DATA[yr].meta.activeMeses=Math.max(DATA[yr].meta.activeMeses,last);
   }
+  saveData();
   togglePanel('presup-panel');render(yr);
 }
 
