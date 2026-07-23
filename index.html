@@ -600,26 +600,37 @@ async function runAI(){
     var e=DATA[yr].cuentas[c].ejec.slice(0,n).reduce(function(a,b){return a+b;},0)*1000;
     return '- '+LABELS[ci]+': presup $'+Math.round(p/1000).toLocaleString('es-AR')+'k, ejec $'+Math.round(e/1000).toLocaleString('es-AR')+'k ('+Math.round(e/p*100)+'%)';
   }).join('\n');
-  var ipcReal=IPC_REAL_2025.filter(function(v){return v>0;});
-  var tcReal=TC_REAL_2025.filter(function(v){return v>0;});
-  var mesesFaltantes=ML.slice(ipcReal.length);
+  // Usa el estado real y actual del dashboard (no valores fijos del código)
+  var mesesReales=typeof DATA[2025].macro.mesesReales==='number'?DATA[2025].macro.mesesReales:7;
+  var ipcReal=DATA[2025].macro.ipc.slice(0,mesesReales);
+  var tcReal=DATA[2025].macro.tc.slice(0,mesesReales);
+  var mesesFaltantes=ML.slice(mesesReales);
+  var hoy=new Date().toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
 
-  var prompt='Sos un especialista en finanzas y mercados argentinos. Tenés dos tareas:\n\n'
+  if(mesesFaltantes.length===0){
+    out.innerHTML='<span style="color:#8AABB5">Ya hay datos reales cargados para los 12 meses del ejercicio — no queda nada por proyectar.</span>';
+    btn.disabled=false;btn.textContent='✦ Analizar con IA';
+    return;
+  }
+
+  var prompt='Sos un especialista en finanzas y mercados argentinos, escribiendo para un Office Manager sin formación financiera. Usá lenguaje simple, directo y accionable, sin jerga innecesaria. Hoy es '+hoy+'.\n\n'
+    +'Tenés dos tareas:\n\n'
     +'**TAREA 1 — Análisis presupuestario**\n'
     +'Ejercicio fiscal Oct 2025 - Sep 2026 ('+n+' meses ejecutados de 12, hasta '+ML[n-1]+'):\n'
     +'- Presupuesto anual: $'+Math.round(totPresup/1000).toLocaleString('es-AR')+'k\n'
     +'- Ejecutado: $'+Math.round(totEjec/1000).toLocaleString('es-AR')+'k ('+pctTotal+'%)\n'
-    +'- IPC real acumulado (Oct25-'+ML[ipcReal.length-1]+'): '+ipcReal.join(', ')+'%\n'
-    +'- TC BNA real (Oct25-'+ML[tcReal.length-1]+'): '+tcReal.map(function(v){return '$'+v;}).join(', ')+'\n'
+    +'- IPC real confirmado (Oct25-'+ML[mesesReales-1]+'): '+ipcReal.join(', ')+'%\n'
+    +'- TC BNA real confirmado (Oct25-'+ML[mesesReales-1]+'): '+tcReal.map(function(v){return '$'+v;}).join(', ')+'\n'
     +'- IPC presupuestado (Oct25-Sep26): '+IPC_PRESUP_2025.join(', ')+'%\n'
     +'- TC presupuestado (Oct25-Sep26): '+TC_PRESUP_2025.map(function(v){return '$'+v;}).join(', ')+'\n\n'
     +'Desglose por cuenta:\n'+cuentasResumen+'\n\n'
+    +'Escribí un análisis ejecutivo (máx 200 palabras): qué cuentas están mejor o peor de lo presupuestado, y si hay algo puntual que requiera atención o una acción de mi parte esta semana. Priorizá lo accionable por sobre lo puramente descriptivo.\n\n'
     +'**TAREA 2 — Proyección macroeconómica**\n'
-    +'Proyectá los meses faltantes: '+mesesFaltantes.join(', ')+'\n'
-    +'Basate en contexto actual: acuerdo FMI, banda cambiaria, convergencia inflacionaria, ROFEX.\n'
-    +'Respondé con análisis ejecutivo (máx 200 palabras) y al final un bloque JSON:\n'
+    +'Proyectá SOLO los meses que todavía no tienen dato real confirmado: '+mesesFaltantes.join(', ')+' ('+mesesFaltantes.length+' meses).\n'
+    +'Basate en tu conocimiento sobre la economía argentina: acuerdo con el FMI, banda cambiaria, convergencia inflacionaria, mercado de futuros (ROFEX). Si no tenés certeza sobre eventos posteriores a tu entrenamiento, usá como piso razonable la continuidad de la tendencia reciente mostrada arriba, con un sesgo conservador (asumí que la inflación y el dólar pueden no bajar tan rápido como lo más optimista del mercado).\n'
+    +'Al final de tu respuesta, agregá un bloque JSON con EXACTAMENTE este formato, sin texto adicional adentro del bloque:\n'
     +'```json\n{"ipc_proyectado":[v1,v2,...],"tc_proyectado":[v1,v2,...]}\n```\n'
-    +'Arrays de '+mesesFaltantes.length+' valores para '+mesesFaltantes.join(', ')+'. IPC en % mensual, TC en pesos venta BNA fin de mes.';
+    +'Los arrays deben tener exactamente '+mesesFaltantes.length+' valores, uno por cada mes de '+mesesFaltantes.join(', ')+' en ese orden. IPC en % mensual (ej: 2.1), TC en pesos por dólar, venta BNA fin de mes (ej: 1550).';
 
   try{
     // Llamada al Cloudflare Worker (guarda la clave de la IA de forma segura)
@@ -635,14 +646,13 @@ async function runAI(){
     if(jsonMatch){
       try{
         var proj=JSON.parse(jsonMatch[1]);
-        var ipcCompleto=IPC_REAL_2025.slice();
-        var tcCompleto=TC_REAL_2025.slice();
-        var startIdx=ipcReal.length;
-        proj.ipc_proyectado.forEach(function(v,i){if(startIdx+i<12)ipcCompleto[startIdx+i]=v;});
-        proj.tc_proyectado.forEach(function(v,i){if(startIdx+i<12)tcCompleto[startIdx+i]=v;});
+        var ipcCompleto=DATA[2025].macro.ipc.slice();
+        var tcCompleto=DATA[2025].macro.tc.slice();
+        proj.ipc_proyectado.forEach(function(v,i){if(mesesReales+i<12)ipcCompleto[mesesReales+i]=v;});
+        proj.tc_proyectado.forEach(function(v,i){if(mesesReales+i<12)tcCompleto[mesesReales+i]=v;});
         DATA[2025].macro.ipc=ipcCompleto;
         DATA[2025].macro.tc=tcCompleto;
-        DATA[2025].macro.mesesReales=startIdx;
+        // mesesReales no cambia: los meses ya confirmados como reales siguen siéndolo
         saveData();
         renderMacro(2025);
         renderSensChart(2025);
