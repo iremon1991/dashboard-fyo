@@ -500,7 +500,7 @@ function renderMacro(yr){
     },
     {
       label:'TC proyectado',
-      data:d.tc.map(function(v,i){return (i>=proyDesde&&v>0)?v:null;}),
+      data:d.tc.map(function(v,i){return (i>=proyDesde-1&&v>0)?v:null;}),
       borderColor:'rgba(107,63,160,.8)',
       backgroundColor:'rgba(107,63,160,.04)',
       tension:.4,pointRadius:4,
@@ -595,6 +595,7 @@ async function runAI(){
   var totPresup=sumF(yr,'presup',12)*1000;
   var totEjec=sumF(yr,'ejec',n)*1000;
   var pctTotal=Math.round(totEjec/totPresup*100);
+  var pctIdeal=Math.round(n/12*100);
   var cuentasResumen=CUENTAS.map(function(c,ci){
     var p=DATA[yr].cuentas[c].presup.reduce(function(a,b){return a+b;},0)*1000;
     var e=DATA[yr].cuentas[c].ejec.slice(0,n).reduce(function(a,b){return a+b;},0)*1000;
@@ -614,11 +615,13 @@ async function runAI(){
   }
 
   var prompt='Sos un especialista en finanzas y mercados argentinos, escribiendo para un Office Manager sin formación financiera. Usá lenguaje simple, directo y accionable, sin jerga innecesaria. Hoy es '+hoy+'.\n\n'
+    +'IMPORTANTE sobre números: todos los porcentajes y montos que necesitás ya te los doy calculados más abajo. No hagas cuentas, divisiones ni porcentajes nuevos por tu cuenta — limitate a citar e interpretar los valores que te paso, tal cual están escritos.\n\n'
     +'Tenés dos tareas:\n\n'
     +'**TAREA 1 — Análisis presupuestario**\n'
     +'Ejercicio fiscal Oct 2025 - Sep 2026 ('+n+' meses ejecutados de 12, hasta '+ML[n-1]+'):\n'
     +'- Presupuesto anual: $'+Math.round(totPresup/1000).toLocaleString('es-AR')+'k\n'
-    +'- Ejecutado: $'+Math.round(totEjec/1000).toLocaleString('es-AR')+'k ('+pctTotal+'%)\n'
+    +'- Ejecutado: $'+Math.round(totEjec/1000).toLocaleString('es-AR')+'k ('+pctTotal+'% del presupuesto anual)\n'
+    +'- Ejecución ideal esperada a esta altura del año ('+n+' de 12 meses transcurridos): '+pctIdeal+'%. IMPORTANTE: usá este número tal cual está escrito acá, NO lo recalcules ni hagas la división vos mismo — es un cálculo exacto que ya viene resuelto.\n'
     +'- IPC real confirmado (Oct25-'+ML[mesesReales-1]+'): '+ipcReal.join(', ')+'%\n'
     +'- TC BNA real confirmado (Oct25-'+ML[mesesReales-1]+'): '+tcReal.map(function(v){return '$'+v;}).join(', ')+'\n'
     +'- IPC presupuestado (Oct25-Sep26): '+IPC_PRESUP_2025.join(', ')+'%\n'
