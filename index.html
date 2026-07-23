@@ -124,7 +124,8 @@ input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding
   <div class="slabel">Sensibilidad presupuestaria — drivers reales vs. presupuestados</div>
   <div class="chart-legend">
     <span><span class="legend-dot" style="background:rgba(0,142,170,.5)"></span>Presupuesto original</span>
-    <span><span class="legend-dot" style="background:rgba(230,126,34,.7)"></span>Reajustado por IPC real / TC real</span>
+    <span><span class="legend-dot" style="background:rgba(230,126,34,.7)"></span>Reajustado (dato real)</span>
+    <span><span class="legend-dot" style="background:rgba(107,63,160,.6)"></span>Reajustado (proyección)</span>
     <span><span class="legend-dot" style="background:rgba(26,58,74,.5)"></span>Ejecutado real</span>
   </div>
   <div style="font-size:11px;color:#8AABB5;font-weight:500;margin-bottom:12px">
@@ -158,11 +159,19 @@ input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding
 
 <div class="macro-grid">
   <div class="card" style="margin:0">
-    <div class="slabel">IPC mensual (%) <span id="ipc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:6px;display:none">★ May-Sep proyectado por IA</span></div>
+    <div class="slabel">IPC mensual (%) <span id="ipc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:6px;display:none">★ Incluye meses proyectados</span></div>
+    <div class="chart-legend" style="margin-bottom:8px">
+      <span><span class="legend-dot" style="background:rgba(0,142,170,.7)"></span>Real</span>
+      <span><span class="legend-dot" style="background:rgba(107,63,160,.6)"></span>Proyección</span>
+    </div>
     <div style="position:relative;height:180px"><canvas id="ipcChart"></canvas></div>
   </div>
   <div class="card" style="margin:0">
-    <div class="slabel">Tipo de cambio USD/ARS <span id="tc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:6px;display:none">★ May-Sep proyectado por IA</span></div>
+    <div class="slabel">Tipo de cambio USD/ARS <span id="tc-badge" style="font-size:9px;background:#EEE8FF;color:#6B3FA0;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:6px;display:none">★ Incluye meses proyectados</span></div>
+    <div class="chart-legend" style="margin-bottom:8px">
+      <span><span class="legend-dot" style="background:#1A3A4A"></span>Real</span>
+      <span><span class="legend-dot" style="background:rgba(107,63,160,.6)"></span>Proyección</span>
+    </div>
     <div style="position:relative;height:180px"><canvas id="tcChart"></canvas></div>
   </div>
 </div>
@@ -176,7 +185,10 @@ input[type=number]{border:1.5px solid var(--fyo-light);border-radius:6px;padding
 <div class="save-toast" id="save-toast">✓ Guardado</div>
 
 <script>
-const WEBHOOK='const AI_WEBHOOK='https://openai-analysis-endpoint.vercel.app/api/analyze';';
+const WEBHOOK='https://fyo.app.n8n.cloud/webhook/presupuesto-data';
+// Reemplazá esta URL por la de tu Cloudflare Worker una vez que lo despliegues
+// (ver instrucciones). Mientras diga "REEMPLAZAR", el botón de IA va a fallar.
+const AI_WEBHOOK='https://openai-analysis-endpoint.vercel.app/api/analyze';
 const ML=['Oct','Nov','Dic','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep'];
 const STORAGE_KEY='fyo-dashboard-data-v1';
 
@@ -213,7 +225,7 @@ function makeYear(sy){
   const am=sy===2025?7:12;
   const ipc=sy===2025?[...IPC_REAL_2025]:ipcD[sy]||Array(12).fill(2);
   const tc=sy===2025?[...TC_REAL_2025]:tcD[sy]||Array(12).fill(1000);
-  const obj={meta:{activeMeses:am},macro:{ipc,tc},cuentas:{}};
+  const obj={meta:{activeMeses:am},macro:{ipc,tc,mesesReales:sy===2025?7:12},cuentas:{}};
   CUENTAS.forEach((c,i)=>{
     const bk=Math.round(bp[i]*s);
     obj.cuentas[c]={
@@ -252,7 +264,25 @@ function showSaveToast(){
   showSaveToast._tid=setTimeout(function(){t.classList.remove('show');},2000);
 }
 
+// Asegura que datos guardados de una versión anterior (sin el campo
+// "mesesReales") tengan un valor por default, para que la distinción
+// real/proyección en los gráficos funcione con cualquier dato ya guardado.
+function normalizeData(d){
+  [2025,2024,2023].forEach(function(yr){
+    if(!d[yr]||!d[yr].macro)return;
+    if(typeof d[yr].macro.mesesReales!=='number'){
+      if(yr===2025){
+        var idx=d[yr].macro.ipc.findIndex(function(v){return v===0;});
+        d[yr].macro.mesesReales=idx>=0?idx:12;
+      }else{
+        d[yr].macro.mesesReales=12;
+      }
+    }
+  });
+}
+
 let DATA=loadSavedData()||{2025:makeYear(2025),2024:makeYear(2024),2023:makeYear(2023)};
+normalizeData(DATA);
 let CY=2025,CURR='ARS',charts={},presupTab=0;
 
 // Calcula presupuesto reajustado por drivers reales para un mes
@@ -314,11 +344,12 @@ function renderSensChart(yr){
   const presupOrig = Array.from({length:12},(_,i)=>mSum(yr,i,'presup')*1000);
   const presupReaj = Array.from({length:12},(_,i)=>calcPresupReajustado(yr,i)*1000);
   const ejecutado  = Array.from({length:12},(_,i)=>{const v=mSum(yr,i,'ejec');return v>0?v*1000:null;});
+  const proyDesde = yr===2025 ? (typeof DATA[yr].macro.mesesReales==='number'?DATA[yr].macro.mesesReales:12) : 12;
 
-  // Solo mostrar reajustado donde hay datos reales
+  // Solo mostrar reajustado donde hay algún driver cargado (real o proyectado)
   const presupReajVis = presupReaj.map(function(v,i){
-    var tieneReal = (DATA[yr].macro.ipc[i]>0 || DATA[yr].macro.tc[i]>0);
-    return tieneReal ? v : null;
+    var tieneDato = (DATA[yr].macro.ipc[i]>0 || DATA[yr].macro.tc[i]>0);
+    return tieneDato ? v : null;
   });
 
   const cfg={type:'bar',data:{labels:ML,datasets:[
@@ -334,8 +365,8 @@ function renderSensChart(yr){
     {
       label:'Reajustado por drivers reales',
       data:presupReajVis,
-      backgroundColor:'rgba(230,126,34,.25)',
-      borderColor:'#E67E22',
+      backgroundColor:presupReajVis.map(function(v,i){return i>=proyDesde?'rgba(107,63,160,.25)':'rgba(230,126,34,.25)';}),
+      borderColor:presupReajVis.map(function(v,i){return i>=proyDesde?'#6B3FA0':'#E67E22';}),
       borderWidth:2,
       borderRadius:6,
       order:2
@@ -429,16 +460,16 @@ function renderMonthTable(yr){
 
 function renderMacro(yr){
   var d=DATA[yr].macro;
-  var primerFuturo=d.ipc.findIndex(function(v){return v===0;});
+  var proyDesde=typeof d.mesesReales==='number'?d.mesesReales:12;
   var opts=function(cb){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Montserrat',weight:'600'}}},y:{grid:{color:gc()},ticks:{color:tcol(),font:{size:10,family:'Montserrat'},callback:cb}}}};};
 
   // IPC: barras reales + línea presupuestada
   var ipcCfg={type:'bar',data:{labels:ML,datasets:[
     {
-      label:'IPC real',
+      label:'IPC',
       data:d.ipc.map(function(v){return v>0?v:null;}),
-      backgroundColor:d.ipc.map(function(v,i){return i>=primerFuturo&&primerFuturo>=0?'rgba(107,63,160,.35)':'rgba(0,142,170,.7)';}),
-      borderColor:d.ipc.map(function(v,i){return i>=primerFuturo&&primerFuturo>=0?'rgba(107,63,160,.8)':'#008EAA';}),
+      backgroundColor:d.ipc.map(function(v,i){return i>=proyDesde?'rgba(107,63,160,.35)':'rgba(0,142,170,.7)';}),
+      borderColor:d.ipc.map(function(v,i){return i>=proyDesde?'rgba(107,63,160,.8)':'#008EAA';}),
       borderWidth:1.5,borderRadius:4
     },
     {
@@ -455,11 +486,11 @@ function renderMacro(yr){
     }
   ]},options:opts(function(v){return v+'%';})};
 
-  // TC: línea real + línea presupuestada
+  // TC: línea real + línea proyectada
   var tcCfg={type:'line',data:{labels:ML,datasets:[
     {
       label:'TC real',
-      data:d.tc.map(function(v){return v>0?v:null;}),
+      data:d.tc.map(function(v,i){return (v>0&&i<proyDesde)?v:null;}),
       borderColor:'#1A3A4A',
       backgroundColor:'rgba(26,58,74,.06)',
       tension:.4,pointRadius:4,
@@ -468,8 +499,8 @@ function renderMacro(yr){
       fill:true,borderWidth:2
     },
     {
-      label:'TC proyectado IA',
-      data:d.tc.map(function(v,i){return i>=primerFuturo&&primerFuturo>=0&&v>0?v:null;}),
+      label:'TC proyectado',
+      data:d.tc.map(function(v,i){return (i>=proyDesde&&v>0)?v:null;}),
       borderColor:'rgba(107,63,160,.8)',
       backgroundColor:'rgba(107,63,160,.04)',
       tension:.4,pointRadius:4,
@@ -491,9 +522,9 @@ function renderMacro(yr){
   if(charts.ipc)charts.ipc.destroy(); charts.ipc=new Chart(document.getElementById('ipcChart'),ipcCfg);
   if(charts.tc)charts.tc.destroy(); charts.tc=new Chart(document.getElementById('tcChart'),tcCfg);
 
-  var tieneProyIpc=d.ipc.some(function(v,i){return i>6&&v>0;});
-  document.getElementById('ipc-badge').style.display=tieneProyIpc?'inline':'none';
-  document.getElementById('tc-badge').style.display=tieneProyIpc?'inline':'none';
+  var tieneProy=proyDesde<12;
+  document.getElementById('ipc-badge').style.display=tieneProy?'inline':'none';
+  document.getElementById('tc-badge').style.display=tieneProy?'inline':'none';
 }
 
 function render(yr){
@@ -541,6 +572,7 @@ async function doSync(){
     }
     DATA[2025].macro.ipc=IPC_REAL_2025.slice();
     DATA[2025].macro.tc=TC_REAL_2025.slice();
+    DATA[2025].macro.mesesReales=IPC_REAL_2025.filter(function(v){return v>0;}).length;
     var now=new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     var statusText='Última actualización: '+now+' — datos reales de OneDrive';
     document.getElementById('sync-status').textContent=statusText;
@@ -590,8 +622,8 @@ async function runAI(){
     +'Arrays de '+mesesFaltantes.length+' valores para '+mesesFaltantes.join(', ')+'. IPC en % mensual, TC en pesos venta BNA fin de mes.';
 
   try{
-    // Llamada via n8n webhook — resuelve el problema de CORS
-    var res=await fetch('https://fyo.app.n8n.cloud/webhook/dashboard-ai',{
+    // Llamada al Cloudflare Worker (guarda la clave de la IA de forma segura)
+    var res=await fetch(AI_WEBHOOK,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({prompt:prompt})
@@ -610,6 +642,7 @@ async function runAI(){
         proj.tc_proyectado.forEach(function(v,i){if(startIdx+i<12)tcCompleto[startIdx+i]=v;});
         DATA[2025].macro.ipc=ipcCompleto;
         DATA[2025].macro.tc=tcCompleto;
+        DATA[2025].macro.mesesReales=startIdx;
         saveData();
         renderMacro(2025);
         renderSensChart(2025);
@@ -642,18 +675,30 @@ function switchPresupTab(i){
 }
 function renderPresupBody(yr,idx){
   var isMacro=idx===CUENTAS.length;
-  var html='<div class="month-grid">';
+  var html='';
   if(isMacro){
     var m=DATA[yr].macro;
+    var mr=typeof m.mesesReales==='number'?m.mesesReales:12;
+    html+='<div style="margin-bottom:1rem;background:#fff;border-radius:10px;padding:.75rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<label style="font-size:10px;color:#8AABB5;font-weight:700;text-transform:uppercase">Datos reales confirmados hasta</label>'
+      +'<select id="meses-reales-sel">'
+      +'<option value="0"'+(mr===0?' selected':'')+'>Ninguno (todo proyección)</option>'
+      +ML.map(function(mes,i){return '<option value="'+(i+1)+'"'+(mr===i+1?' selected':'')+'>'+mes+'</option>';}).join('')
+      +'</select>'
+      +'<span style="font-size:10px;color:#8AABB5">Los meses posteriores se marcan como proyección en los gráficos</span>'
+      +'</div>';
+    html+='<div class="month-grid">';
     ML.forEach(function(mes,i){
-      var esProyIpc=IPC_REAL_2025[i]===0&&m.ipc[i]>0;
-      html+='<div style="background:#fff;border-radius:10px;padding:.75rem"><div style="font-size:11px;font-weight:700;color:var(--fyo);margin-bottom:6px;text-transform:uppercase">'+mes+(esProyIpc?' <span style="font-size:9px;color:#6B3FA0">★IA</span>':'')+'</div>'
+      var esProy=i>=mr;
+      html+='<div style="background:#fff;border-radius:10px;padding:.75rem"><div style="font-size:11px;font-weight:700;color:var(--fyo);margin-bottom:6px;text-transform:uppercase">'+mes+(esProy?' <span style="font-size:9px;color:#6B3FA0">★ Proy.</span>':'')+'</div>'
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
         +'<div><label style="font-size:10px;color:#8AABB5;display:block;margin-bottom:2px;font-weight:600">IPC(%)</label><input type="number" id="ipc'+i+'" value="'+m.ipc[i]+'" step="0.1"></div>'
         +'<div><label style="font-size:10px;color:#8AABB5;display:block;margin-bottom:2px;font-weight:600">TC</label><input type="number" id="tc'+i+'" value="'+m.tc[i]+'"></div>'
         +'</div></div>';
     });
+    html+='</div>';
   }else{
+    html+='<div class="month-grid">';
     var cd=DATA[yr].cuentas[CUENTAS[idx]];
     ML.forEach(function(mes,i){
       html+='<div style="background:#fff;border-radius:10px;padding:.75rem"><div style="font-size:11px;font-weight:700;color:var(--fyo);margin-bottom:6px;text-transform:uppercase">'+mes+'</div>'
@@ -662,8 +707,9 @@ function renderPresupBody(yr,idx){
         +'<div><label style="font-size:10px;color:#8AABB5;display:block;margin-bottom:2px;font-weight:600">Ejec.(k)</label><input type="number" id="me'+i+'" value="'+(typeof cd.ejec[i]==='number'?cd.ejec[i].toFixed(1):cd.ejec[i])+'"></div>'
         +'</div></div>';
     });
+    html+='</div>';
   }
-  html+='</div><div style="margin-top:.75rem;font-size:11px;color:#8AABB5;font-weight:500">Valores en miles de ARS.</div>';
+  html+='<div style="margin-top:.75rem;font-size:11px;color:#8AABB5;font-weight:500">Valores en miles de ARS.</div>';
   document.getElementById('presup-body').innerHTML=html;
 }
 function savePresup(){
@@ -673,6 +719,8 @@ function savePresup(){
       DATA[yr].macro.ipc[i]=parseFloat(document.getElementById('ipc'+i).value)||0;
       DATA[yr].macro.tc[i]=parseFloat(document.getElementById('tc'+i).value)||0;
     }
+    var mrSel=document.getElementById('meses-reales-sel');
+    if(mrSel) DATA[yr].macro.mesesReales=parseInt(mrSel.value)||0;
   }else{
     var c=CUENTAS[presupTab],last=0;
     for(var i=0;i<12;i++){
